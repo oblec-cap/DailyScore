@@ -33,9 +33,39 @@ function Shell({ children, store, onResetIntro }: { children: ReactNode; store: 
   const [location] = useLocation();
   useTheme(store.settings.theme);
   useEffect(() => {
-    const link = document.createElement('link'); link.rel = 'manifest'; link.href = '/manifest.webmanifest'; document.head.appendChild(link);
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => undefined);
-    return () => link.remove();
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = '/manifest.webmanifest';
+    document.head.appendChild(link);
+
+    if (!('serviceWorker' in navigator)) return () => link.remove();
+
+    let hadController = Boolean(navigator.serviceWorker.controller);
+    let hasReloadedForUpdate = false;
+    const handleControllerChange = () => {
+      if (!hadController) {
+        hadController = true;
+        return;
+      }
+      if (!hasReloadedForUpdate) {
+        hasReloadedForUpdate = true;
+        window.location.reload();
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+    navigator.serviceWorker.register('/sw.js').then((registration) => {
+      // Check for a newer worker whenever the app launches.
+      registration.update().catch(() => undefined);
+    }).catch(() => undefined);
+
+    // Ask the browser to protect this device's local data from eviction.
+    if (navigator.storage?.persist) navigator.storage.persist().catch(() => undefined);
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+      link.remove();
+    };
   }, []);
   const nav = [
     { href: '/', label: 'Today', icon: Home },

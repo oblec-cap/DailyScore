@@ -22,9 +22,17 @@ export type Settings = {
   defaultReminder: string;
   weekStarts: 'monday' | 'sunday';
 };
-export type Store = { tasks: Task[]; records: CompletionRecord[]; settings: Settings; hasLaunched: boolean };
+export type Store = {
+  tasks: Task[];
+  records: CompletionRecord[];
+  settings: Settings;
+  hasLaunched: boolean;
+  schemaVersion: number;
+};
 
 const KEY = 'dailyscore-local-v1';
+const BACKUP_KEY = `${KEY}-backup`;
+const STORAGE_VERSION = 1;
 export const todayKey = () => {
   const d = new Date();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -42,18 +50,51 @@ export const seedStore = (): Store => {
     records: [],
     settings: { theme: 'light', notifications: false, defaultReminder: '18:00', weekStarts: 'monday' },
     hasLaunched: false,
+    schemaVersion: STORAGE_VERSION,
   };
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const restoreStore = (value: unknown): Store | null => {
+  if (!isRecord(value) || !Array.isArray(value.tasks) || !Array.isArray(value.records)) return null;
+
+  const defaults = seedStore();
+  const settings = isRecord(value.settings) ? value.settings : {};
+
+  // Keep this migration boundary stable. New fields should be added to
+  // defaults and migrated here instead of replacing the user's stored data.
+  return {
+    ...defaults,
+    ...value,
+    tasks: value.tasks as Task[],
+    records: value.records as CompletionRecord[],
+    settings: { ...defaults.settings, ...settings } as Settings,
+    hasLaunched: true,
+    schemaVersion: STORAGE_VERSION,
+  };
+};
+
 export const loadStore = (): Store => {
+  const raw = localStorage.getItem(KEY);
   try {
-    const parsed = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (parsed?.tasks && parsed?.records) return { ...seedStore(), ...parsed, hasLaunched: true };
-  } catch { /* safe empty state */ }
+    const restored = restoreStore(raw ? JSON.parse(raw) : null);
+    if (restored) {
+      saveStore(restored);
+      return restored;
+    }
+  } catch {
+    // Keep the last raw value available for recovery instead of losing it
+    // when a future release encounters malformed or incompatible data.
+    if (raw) localStorage.setItem(BACKUP_KEY, raw);
+  }
   const initial = seedStore();
-  localStorage.setItem(KEY, JSON.stringify(initial));
+  saveStore(initial);
   return initial;
 };
-export const saveStore = (store: Store) => localStorage.setItem(KEY, JSON.stringify(store));
+export const saveStore = (store: Store) =>
+  localStorage.setItem(KEY, JSON.stringify({ ...store, schemaVersion: STORAGE_VERSION }));
 export const isScheduled = (task: Task, date: string) => {
   if (task.repeat === 'daily') return true;
   if (task.repeat === 'weekdays') return task.weekdays.includes(new Date(`${date}T12:00:00`).getDay());
@@ -69,6 +110,7 @@ export const displayUnit = (unit: string, value: number) => `${value} ${unit}${v
 export const exportJson = (store: Store) => JSON.stringify({ ...store, exportedAt: new Date().toISOString() }, null, 2);
 export const importJson = (json: string): Store => {
   const parsed = JSON.parse(json);
-  if (!Array.isArray(parsed.tasks) || !Array.isArray(parsed.records)) throw new Error('This file does not look like DailyScore data.');
-  return { ...seedStore(), ...parsed, hasLaunched: true };
+  const restored = restoreStore(parsed);
+  if (!restored) throw new Error('This file does not look like DailyScore data.');
+  return restored;
 };
