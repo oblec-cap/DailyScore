@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "KaF49v8Q09zbx0qo7tOjc"
+uri = "file://dailyscore-netlify.zip"
+type = "unspecified"
+title = "DailyScore Netlify upload package"
+description = "Extract this ZIP, then drag the dailyscore-netlify folder into Netlify's manual deploy area."
+logical_id = "0d69319d-41c9-4cf5-ae69-9238bcfe7bfd"
+content_hash = "sha256:37c758bb4c9c078776a26c89f0fd27efa3a8c3ccba021864ebcbd444178d8232"
+size = 269600
+mtime_ms = 1789999717949
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:921251b1-c12c-4ec3-be1a-24aab35bacfd/0d69319d-41c9-4cf5-ae69-9238bcfe7bfd/74e58c8d-9b83-4bee-83e6-acf38c629be6"
+storage_version_token = "1789999733036549"
+content_type = "application/octet-stream"
