@@ -5,26 +5,14 @@ import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    'PORT environment variable is required but was not provided.',
-  );
-}
-
+// Replit provides PORT and BASE_PATH automatically. External static hosts
+// such as Netlify do not, so use normal Vite defaults when they are absent.
+const rawPort = process.env.PORT ?? '5173';
 const port = Number(rawPort);
+const basePath = process.env.BASE_PATH ?? '/';
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    'BASE_PATH environment variable is required but was not provided.',
-  );
 }
 
 export default defineConfig({
