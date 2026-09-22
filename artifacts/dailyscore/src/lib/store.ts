@@ -100,6 +100,13 @@ export const isScheduled = (task: Task, date: string) => {
   if (task.repeat === 'weekdays') return task.weekdays.includes(new Date(`${date}T12:00:00`).getDay());
   return task.createdAt.slice(0, 10) === date;
 };
+export const nextScheduledDate = (task: Task, fromDate: string) => {
+  for (let offset = 0; offset <= 7; offset++) {
+    const candidate = dateOffset(fromDate, offset);
+    if (isScheduled(task, candidate)) return candidate;
+  }
+  return null;
+};
 export const getActual = (records: CompletionRecord[], taskId: string, date: string) => records.find((r) => r.taskId === taskId && r.date === date)?.actual || 0;
 export const completion = (actual: number, target: number) => target ? Math.min(100, Math.round((actual / target) * 100)) : 0;
 export const formatDate = (date: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }) => new Intl.DateTimeFormat('en-US', options).format(new Date(`${date}T12:00:00`));

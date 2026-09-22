@@ -4,8 +4,8 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useLocation, Link, Route, Switch, Router as WouterRouter } from 'wouter';
-import { Activity, Bell, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Copy, Download, Dumbbell, FileJson, Flame, Home, Moon, Pencil, Plus, RotateCcw, Settings as SettingsIcon, Sparkles, Sun, Target, Trash2, Trophy, Upload, X, Zap } from 'lucide-react';
-import { Category, completion, dateOffset, displayUnit, exportJson, formatDate, getActual, importJson, isScheduled, loadStore, makeId, saveStore, startOfWeek, Store, Task, todayKey, weekDates } from '@/lib/store';
+import { Activity, Bell, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Copy, Download, Dumbbell, FileJson, Flame, Home, LockKeyhole, Moon, Pencil, Plus, RotateCcw, Settings as SettingsIcon, ShieldAlert, Sparkles, Sun, Target, Trash2, Trophy, Upload, X, Zap } from 'lucide-react';
+import { Category, completion, dateOffset, displayUnit, exportJson, formatDate, getActual, importJson, isScheduled, loadStore, makeId, nextScheduledDate, saveStore, startOfWeek, Store, Task, todayKey, weekDates } from '@/lib/store';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -27,6 +27,32 @@ function useTheme(theme: Store['settings']['theme']) {
     root.classList.toggle('dark', dark);
     root.style.colorScheme = dark ? 'dark' : 'light';
   }, [theme]);
+}
+
+function useTodayKey() {
+  const [date, setDate] = useState(todayKey);
+
+  useEffect(() => {
+    let timer: number;
+    const sync = () => setDate((current) => current === todayKey() ? current : todayKey());
+    const scheduleMidnightRefresh = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setHours(24, 0, 0, 0);
+      timer = window.setTimeout(() => {
+        sync();
+        scheduleMidnightRefresh();
+      }, Math.max(1000, nextMidnight.getTime() - now.getTime()));
+    };
+    document.addEventListener('visibilitychange', sync);
+    scheduleMidnightRefresh();
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', sync);
+    };
+  }, []);
+
+  return date;
 }
 
 function Shell({ children, store, onResetIntro }: { children: ReactNode; store: Store; onResetIntro: () => void }) {
@@ -110,32 +136,90 @@ function StatCard({ label, value, detail, icon: Icon, accent = 'text-primary' }:
   return <div className="ds-card rounded-2xl p-4"><div className="mb-4 flex items-center justify-between"><span className="text-xs font-semibold text-muted-foreground">{label}</span><Icon size={17} className={accent} /></div><div className="ds-display text-3xl">{value}</div><div className="mt-1 text-xs text-muted-foreground">{detail}</div></div>;
 }
 
-function TaskRow({ task, date, actual, onProgress, onDelete, onDuplicate }: { task: Task; date: string; actual: number; onProgress: (value: number) => void; onDelete: () => void; onDuplicate: () => void }) {
-  const pct = completion(actual, task.target); const Icon = iconFor(task.category);
-  return <article className="ds-card group rounded-2xl p-4 transition hover:-translate-y-0.5 hover:shadow-lg sm:p-5" data-testid={`card-task-${task.id}`}>
-    <div className="flex items-start gap-3"><div className={cx('mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', categoryTint(task.category))}><Icon size={18} /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><h3 className="font-bold leading-5">{task.name}{task.isExample && <span className="ml-2 rounded-full bg-accent/25 px-2 py-0.5 align-middle font-mono text-[9px] uppercase tracking-wide text-accent-foreground">example</span>}</h3><p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{task.category}</span>{task.reminder && <span className="flex items-center gap-1"><Clock3 size={12} />{task.reminder}</span>}</p></div><div className="flex shrink-0 items-center gap-0.5 opacity-70"><Link href={`/add?edit=${task.id}`} data-testid={`button-edit-${task.id}`} className="rounded-lg p-2 hover:bg-muted"><Pencil size={15} /></Link><button onClick={onDuplicate} data-testid={`button-duplicate-${task.id}`} className="rounded-lg p-2 hover:bg-muted"><Copy size={15} /></button><button onClick={onDelete} data-testid={`button-delete-${task.id}`} className="rounded-lg p-2 text-destructive hover:bg-destructive/10"><Trash2 size={15} /></button></div></div>
-      <div className="mt-4 flex items-end justify-between gap-3"><div className="flex-1"><div className="mb-2 flex items-baseline justify-between"><span className="ds-mono text-sm font-bold">{actual} <span className="font-sans font-normal text-muted-foreground">/ {task.target} {task.unit}</span></span><span className={cx('font-mono text-xs font-bold', pct >= 100 ? 'text-primary' : 'text-muted-foreground')}>{pct >= 100 ? 'complete' : `${pct}%`}</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className={cx('ds-progress h-full rounded-full', pct >= 100 ? 'bg-primary' : 'bg-accent')} style={{ width: `${pct}%` }} /></div></div><button onClick={() => onProgress(task.target)} data-testid={`button-complete-${task.id}`} className={cx('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border', pct >= 100 ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-primary hover:bg-primary hover:text-primary-foreground')} aria-label={`Complete ${task.name}`}><Check size={18} /></button></div>
-       <div className="mt-3 flex items-center gap-2"><span className="text-[11px] font-semibold text-muted-foreground">Quick add</span>{[5, 10].map((amount) => <button key={amount} onClick={() => onProgress(Math.min(task.target, actual + amount))} data-testid={`button-add-${amount}-${task.id}`} className="rounded-lg border border-border px-2.5 py-1.5 font-mono text-[10px] font-bold hover:border-primary hover:text-primary">+{amount}</button>)}<button onClick={() => onProgress(task.target)} data-testid={`button-add-100-${task.id}`} className="rounded-lg border border-border px-2.5 py-1.5 font-mono text-[10px] font-bold hover:border-primary hover:text-primary">100%</button><span className="ml-auto text-[11px] text-muted-foreground">{pct >= 100 ? 'Nice work.' : 'Keep the thread.'}</span></div>
-     </div></div>
+function TaskRow({ task, date, actual, locked = false, unlockDate, onProgress, onDelete, onDuplicate }: { task: Task; date: string; actual: number; locked?: boolean; unlockDate?: string | null; onProgress: (value: number) => void; onDelete: () => void; onDuplicate: () => void }) {
+  const pct = completion(actual, task.target);
+  const Icon = iconFor(task.category);
+  const unlockLabel = unlockDate ? formatDate(unlockDate, { weekday: 'long', month: 'short', day: 'numeric' }) : 'its next scheduled day';
+
+  return <article className={cx('ds-card group rounded-2xl p-4 transition sm:p-5', !locked && 'hover:-translate-y-0.5 hover:shadow-lg')} data-testid={`card-task-${task.id}`} aria-label={locked ? `${task.name}, locked until ${unlockLabel}` : task.name}>
+    <div className="flex items-start gap-3">
+      <div className={cx('mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', locked ? 'bg-muted text-muted-foreground' : categoryTint(task.category))}><Icon size={18} /></div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="font-bold leading-5">{task.name}{task.isExample && <span className="ml-2 rounded-full bg-accent/25 px-2 py-0.5 align-middle font-mono text-[9px] uppercase tracking-wide text-accent-foreground">example</span>}</h3>
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{task.category}</span>{task.reminder && <span className="flex items-center gap-1"><Clock3 size={12} />{task.reminder}</span>}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5 opacity-70">
+            <Link href={`/add?edit=${task.id}`} data-testid={`button-edit-${task.id}`} className="rounded-lg p-2 hover:bg-muted" aria-label={`Edit ${task.name}`}><Pencil size={15} /></Link>
+            <button onClick={onDuplicate} data-testid={`button-duplicate-${task.id}`} className="rounded-lg p-2 hover:bg-muted" aria-label={`Duplicate ${task.name}`}><Copy size={15} /></button>
+            <button onClick={onDelete} data-testid={`button-delete-${task.id}`} className="rounded-lg p-2 text-destructive hover:bg-destructive/10" aria-label={`Delete ${task.name}`}><Trash2 size={15} /></button>
+          </div>
+        </div>
+        <div className={cx('mt-4 flex items-end justify-between gap-3', locked && 'rounded-xl bg-muted/45 p-3')}>
+          <div className="flex-1">
+            <div className="mb-2 flex items-baseline justify-between"><span className="ds-mono text-sm font-bold">{actual} <span className="font-sans font-normal text-muted-foreground">/ {task.target} {task.unit}</span></span><span className={cx('font-mono text-xs font-bold', pct >= 100 ? 'text-primary' : 'text-muted-foreground')}>{pct >= 100 ? 'complete' : `${pct}%`}</span></div>
+            <div className="h-2 overflow-hidden rounded-full bg-muted"><div className={cx('ds-progress h-full rounded-full', pct >= 100 ? 'bg-primary' : 'bg-accent')} style={{ width: `${pct}%` }} /></div>
+          </div>
+          <button disabled={locked} onClick={() => onProgress(task.target)} data-testid={`button-complete-${task.id}`} className={cx('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border disabled:cursor-not-allowed disabled:opacity-45', pct >= 100 ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-primary hover:bg-primary hover:text-primary-foreground')} aria-label={locked ? `Locked until ${unlockLabel}` : `Complete ${task.name}`}><Check size={18} /></button>
+        </div>
+        {locked ? <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2.5 text-[11px] font-semibold text-muted-foreground"><LockKeyhole size={14} className="shrink-0 text-primary" /><span>Opens {unlockLabel}. You can prepare it now; progress starts then.</span></div> : <div className="mt-3 flex items-center gap-2"><span className="text-[11px] font-semibold text-muted-foreground">Quick add</span>{[5, 10].map((amount) => <button key={amount} onClick={() => onProgress(Math.min(task.target, actual + amount))} data-testid={`button-add-${amount}-${task.id}`} className="rounded-lg border border-border px-2.5 py-1.5 font-mono text-[10px] font-bold hover:border-primary hover:text-primary">+{amount}</button>)}<button onClick={() => onProgress(task.target)} data-testid={`button-add-100-${task.id}`} className="rounded-lg border border-border px-2.5 py-1.5 font-mono text-[10px] font-bold hover:border-primary hover:text-primary">100%</button><span className="ml-auto text-[11px] text-muted-foreground">{pct >= 100 ? 'Nice work.' : 'Keep the thread.'}</span></div>}
+      </div>
+    </div>
   </article>;
 }
 
+function DeleteTaskDialog({ task, onCancel, onConfirm }: { task: Task; onCancel: () => void; onConfirm: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => event.key === 'Escape' && onCancel();
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onCancel]);
+
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/25 p-5 backdrop-blur-sm" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
+    <div className="ds-in w-full max-w-md overflow-hidden rounded-[26px] border border-destructive/20 bg-card shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="delete-task-title" aria-describedby="delete-task-description" data-testid="dialog-delete-task">
+      <div className="relative overflow-hidden bg-primary p-6 text-primary-foreground">
+        <div className="absolute -right-10 -top-16 h-40 w-40 rounded-full border-[22px] border-accent/20" />
+        <div className="relative flex items-start justify-between gap-4"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground shadow-lg"><ShieldAlert size={24} /></span><button onClick={onCancel} className="rounded-xl p-2 text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground" aria-label="Keep task"><X size={18} /></button></div>
+        <p className="relative mt-5 font-mono text-[10px] font-bold uppercase tracking-[.2em] text-accent">A considered choice</p>
+        <h2 id="delete-task-title" className="relative mt-1 ds-display text-3xl">Let this one go?</h2>
+      </div>
+      <div className="p-6">
+        <p id="delete-task-description" className="text-sm leading-6 text-muted-foreground">You’re about to remove <strong className="text-foreground">“{task.name}”</strong> from your plan. Your completed history stays safe, but this task will no longer appear on future days.</p>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button onClick={onCancel} data-testid="button-cancel-delete" className="rounded-xl border border-border px-4 py-3 text-sm font-bold hover:bg-muted">Keep task</button><button onClick={onConfirm} data-testid="button-confirm-delete" className="flex items-center justify-center gap-2 rounded-xl bg-destructive px-4 py-3 text-sm font-bold text-destructive-foreground shadow-sm hover:opacity-90"><Trash2 size={16} />Remove task</button></div>
+      </div>
+    </div>
+  </div>;
+}
+
 function Today({ store, update }: { store: Store; update: (fn: (s: Store) => Store) => void }) {
-  const date = todayKey(); const scheduled = store.tasks.filter((task) => isScheduled(task, date));
+  const date = useTodayKey();
+  const scheduled = store.tasks.filter((task) => isScheduled(task, date));
+  const upcoming = store.tasks
+    .map((task) => ({ task, unlockDate: nextScheduledDate(task, date) }))
+    .filter(({ task, unlockDate }) => !isScheduled(task, date) && unlockDate);
+  const visibleTasks = [...scheduled.map((task) => ({ task, locked: false, unlockDate: null })), ...upcoming.map(({ task, unlockDate }) => ({ task, locked: true, unlockDate }))];
   const totals = scheduled.reduce((a, task) => ({ target: a.target + task.target, actual: a.actual + getActual(store.records, task.id, date) }), { target: 0, actual: 0 });
   const percent = completion(totals.actual, totals.target);
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening';
   const change = (task: Task, actual: number) => update((s) => ({ ...s, records: [...s.records.filter((r) => !(r.taskId === task.id && r.date === date)), { taskId: task.id, date, actual: Math.min(task.target, Math.max(0, actual)) }] }));
-  const remove = (task: Task) => { if (window.confirm(`Remove “${task.name}”? Its history will stay safe.`)) update((s) => ({ ...s, tasks: s.tasks.filter((t) => t.id !== task.id) })); };
+  const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
+  const remove = (task: Task) => setPendingDelete(task);
+  const confirmRemove = () => {
+    if (!pendingDelete) return;
+    update((s) => ({ ...s, tasks: s.tasks.filter((t) => t.id !== pendingDelete.id) }));
+    setPendingDelete(null);
+  };
   const duplicate = (task: Task) => update((s) => ({ ...s, tasks: [...s.tasks, { ...task, id: makeId(), name: `${task.name} copy`, isExample: false, createdAt: date }] }));
   return <div className="mx-auto max-w-[1180px] px-5 py-8 sm:px-8 md:px-10 md:py-12">
      <div className="ds-in mb-9 flex items-start justify-between gap-4"><div><p className="mb-2 font-mono text-[10px] uppercase tracking-[.22em] text-primary">{formatDate(date, { weekday: 'long', month: 'long', day: 'numeric' })}</p><h1 className="ds-display text-4xl sm:text-5xl">{greeting}, <em className="text-primary">friend.</em></h1><p className="mt-2 text-sm text-muted-foreground">A little intention, then the rest can unfold.</p></div><Link href="/add" data-testid="link-add-top" className="flex h-11 shrink-0 items-center gap-2 rounded-xl bg-primary px-3 text-sm font-bold text-primary-foreground shadow-md hover:opacity-90 sm:px-4"><Plus size={17} /><span>Add task</span></Link></div>
     <section className="ds-in ds-in-2 relative mb-7 overflow-hidden rounded-[26px] bg-primary p-6 text-primary-foreground sm:p-8"><div className="absolute -right-16 -top-24 h-72 w-72 rounded-full border-[34px] border-accent/20" /><div className="absolute -bottom-32 right-28 h-64 w-64 rounded-full border-[1px] border-primary-foreground/10" /><div className="relative flex items-center justify-between gap-6"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] opacity-70">Your daily score</p><div className="mt-3 flex items-baseline gap-2"><span className="ds-display text-6xl">{percent}</span><span className="ds-display text-2xl opacity-70">%</span></div><p className="mt-2 max-w-[240px] text-sm leading-5 opacity-75">{scheduled.length ? percent >= 100 ? 'You made the space and filled it.' : `${totals.actual} of ${totals.target} ${scheduled.length === 1 ? 'unit' : 'units'} in motion.` : 'Make today yours with one small task.'}</p></div><ProgressRing percent={percent} size={136} /></div></section>
     <div className="mb-7 grid grid-cols-2 gap-3 sm:grid-cols-4"><StatCard label="Workout" value={`${completion(scheduled.filter(t => t.category === 'Workout').reduce((a,t)=>a+getActual(store.records,t.id,date),0), scheduled.filter(t=>t.category==='Workout').reduce((a,t)=>a+t.target,0))}%`} detail={`${scheduled.filter(t=>t.category === 'Workout').length} planned`} icon={Dumbbell} accent="text-[#a9622f]" /><StatCard label="Study & others" value={`${completion(scheduled.filter(t => t.category === 'Study & Others').reduce((a,t)=>a+getActual(store.records,t.id,date),0), scheduled.filter(t=>t.category==='Study & Others').reduce((a,t)=>a+t.target,0))}%`} detail={`${scheduled.filter(t=>t.category === 'Study & Others').length} planned`} icon={BookOpen} accent="text-[#246579]" /><StatCard label="Tasks" value={`${scheduled.length}`} detail={`${scheduled.filter(t=>getActual(store.records,t.id,date)>=t.target).length} complete`} icon={Target} /><StatCard label="Streak" value={`${streak(store)}d`} detail="days showing up" icon={Flame} accent="text-accent-foreground" /></div>
     {!store.hasLaunched && <div className="ds-in ds-in-3 mb-6 flex items-start gap-3 rounded-2xl border border-accent/40 bg-accent/15 p-4"><Sparkles size={18} className="mt-0.5 shrink-0 text-accent-foreground" /><div className="flex-1"><b className="text-sm">A couple of examples are ready.</b><p className="mt-1 text-xs leading-5 text-muted-foreground">They’re here to show the shape of DailyScore. Keep them, edit them, or make your own.</p></div><Link href="/add" data-testid="link-onboarding-add" className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground">Make mine</Link></div>}
-     <section className="ds-in ds-in-3"><div className="mb-4 flex items-end justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-muted-foreground">The plan</p><h2 className="ds-display mt-1 text-3xl">Today’s rhythm</h2></div><div className="flex items-center gap-2">{scheduled.length > 0 && <span className="rounded-full bg-muted px-3 py-1.5 font-mono text-[10px] text-muted-foreground">{scheduled.length} {scheduled.length === 1 ? 'task' : 'tasks'}</span>}<Link href="/add" data-testid="link-add-plan" className="flex items-center gap-1.5 rounded-lg border border-primary/30 px-2.5 py-1.5 text-xs font-bold text-primary hover:bg-primary/10"><Plus size={14} />Add</Link></div></div>
-      {scheduled.length ? <div className="grid gap-3 lg:grid-cols-2">{scheduled.map(task => <TaskRow key={task.id} task={task} date={date} actual={getActual(store.records, task.id, date)} onProgress={(v) => change(task, v)} onDelete={() => remove(task)} onDuplicate={() => duplicate(task)} />)}</div> : <EmptyTasks />}
+     <section className="ds-in ds-in-3"><div className="mb-4 flex items-end justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-muted-foreground">The plan</p><h2 className="ds-display mt-1 text-3xl">Today’s rhythm</h2></div><div className="flex items-center gap-2">{visibleTasks.length > 0 && <span className="rounded-full bg-muted px-3 py-1.5 font-mono text-[10px] text-muted-foreground">{scheduled.length} today{upcoming.length ? ` · ${upcoming.length} upcoming` : ''}</span>}<Link href="/add" data-testid="link-add-plan" className="flex items-center gap-1.5 rounded-lg border border-primary/30 px-2.5 py-1.5 text-xs font-bold text-primary hover:bg-primary/10"><Plus size={14} />Add</Link></div></div>
+       {visibleTasks.length ? <div className="grid gap-3 lg:grid-cols-2">{visibleTasks.map(({ task, locked, unlockDate }) => <TaskRow key={task.id} task={task} date={date} actual={locked ? 0 : getActual(store.records, task.id, date)} locked={locked} unlockDate={unlockDate} onProgress={(v) => change(task, v)} onDelete={() => remove(task)} onDuplicate={() => duplicate(task)} />)}</div> : <EmptyTasks />}
     </section>
+     {pendingDelete && <DeleteTaskDialog task={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmRemove} />}
   </div>;
 }
 
