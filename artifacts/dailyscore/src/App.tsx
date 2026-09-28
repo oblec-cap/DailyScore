@@ -15,8 +15,14 @@ const categoryTint = (category: Category) => category === 'Workout' ? 'text-[#a9
 
 function useDailyScore() {
   const [store, setStore] = useState<Store>(() => loadStore());
+  const storeRef = useRef(store);
   useEffect(() => { saveStore(store); }, [store]);
-  const update = (fn: (current: Store) => Store) => setStore((current) => fn(current));
+  const update = (fn: (current: Store) => Store) => {
+    const next = fn(storeRef.current);
+    storeRef.current = next;
+    saveStore(next);
+    setStore(next);
+  };
   return { store, update, setStore };
 }
 

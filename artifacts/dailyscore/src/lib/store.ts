@@ -85,10 +85,12 @@ export const loadStore = (): Store => {
       return restored;
     }
   } catch {
-    // Keep the last raw value available for recovery instead of losing it
-    // when a future release encounters malformed or incompatible data.
-    if (raw) localStorage.setItem(BACKUP_KEY, raw);
+    // Preserve malformed data below so it can be recovered instead of being
+    // silently replaced by a fresh store.
   }
+  // Keep any unrecognized raw value available for recovery instead of losing
+  // it when a future release encounters malformed or incompatible data.
+  if (raw) localStorage.setItem(BACKUP_KEY, raw);
   const initial = seedStore();
   saveStore(initial);
   return initial;
